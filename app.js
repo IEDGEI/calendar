@@ -553,9 +553,15 @@ function renderCalendar() {
 
     for (let i = 0; i < startDayOfWeek; i += 1) {
         const emptyCell = document.createElement('div');
-        emptyCell.className = 'bg-gray-900/10 rounded-xl border border-transparent select-none';
+        emptyCell.className = 'aspect-square invisible select-none';
         grid.appendChild(emptyCell);
     }
+
+    const todayString = makeDateString(
+        new Date().getFullYear(),
+        new Date().getMonth(),
+        new Date().getDate()
+    );
 
     for (let day = 1; day <= totalDays; day += 1) {
         const dateString = makeDateString(year, month, day);
@@ -565,41 +571,48 @@ function renderCalendar() {
             schedule.impossible_date === dateString
         );
         const isFinalized = AppState.room?.finalized_date === dateString;
+        const isToday = dateString === todayString;
         const cell = document.createElement('button');
         cell.type = 'button';
         cell.dataset.date = dateString;
-        cell.className = 'group relative min-h-[62px] rounded-xl border p-2 text-left transition hover:z-50 focus:z-50 focus:outline-none select-none touch-manipulation';
+        cell.className = 'group relative aspect-square min-w-0 rounded-lg sm:rounded-xl border bg-gray-900/45 p-1.5 sm:p-2 text-left transition hover:z-50 hover:-translate-y-0.5 focus:z-50 focus:outline-none select-none touch-manipulation flex flex-col';
 
         if (people.length === 0) {
-            cell.className += ' bg-[#132d21] border-[#22c55e]/30 hover:border-emerald-500/60';
+            cell.className += ' border-emerald-800/60 hover:border-emerald-500/70 hover:bg-emerald-950/25';
         } else if (people.length === 1) {
-            cell.className += ' bg-[#2d1b11] border-[#f59e0b]/30 hover:border-amber-500/60';
+            cell.className += ' border-amber-800/60 hover:border-amber-500/70 hover:bg-amber-950/25';
         } else {
-            cell.className += ' bg-[#2d1111] border-[#ef4444]/30 hover:border-red-500/60';
+            cell.className += ' border-rose-800/60 hover:border-rose-500/70 hover:bg-rose-950/25';
         }
-        if (isMine) cell.className += ' ring-2 ring-indigo-500/80';
+        if (isToday) cell.className += ' shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]';
         if (isFinalized) cell.className += ' outline outline-2 outline-offset-2 outline-violet-400';
 
         const dayNumber = document.createElement('span');
-        dayNumber.className = `text-sm font-bold ${
+        dayNumber.className = `text-xs sm:text-sm font-bold leading-none ${
             people.length >= 2 ? 'text-red-400' :
             people.length === 1 ? 'text-amber-400' : 'text-emerald-400'
         }`;
         dayNumber.innerText = day;
 
         const statusTag = document.createElement('span');
-        statusTag.className = 'mt-2 block truncate text-[9px] font-medium text-gray-400';
+        statusTag.className = 'mt-auto block max-w-full truncate text-[8px] sm:text-[9px] font-medium text-gray-500';
         statusTag.innerText = people.length
-            ? people.slice(0, 2).map((person) => person.nickname).join(', ') +
-                (people.length > 2 ? ` 외 ${people.length - 2}명` : '')
-            : '모두 가능';
+            ? `${people.length}명 불가`
+            : '가능';
         cell.append(dayNumber, statusTag);
 
         if (isFinalized) {
             const finalBadge = document.createElement('span');
-            finalBadge.className = 'absolute right-1.5 top-1.5 rounded bg-violet-500 px-1 py-0.5 text-[8px] font-bold text-white';
-            finalBadge.innerText = '확정';
+            finalBadge.className = 'absolute right-1 top-1 rounded-full bg-violet-500 px-1.5 py-0.5 text-[7px] font-bold text-white shadow-lg';
+            finalBadge.innerText = '약속';
             cell.appendChild(finalBadge);
+        }
+
+        if (isMine) {
+            const mineIndicator = document.createElement('span');
+            mineIndicator.className = 'absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-indigo-400 ring-2 ring-indigo-500/20';
+            mineIndicator.title = '내가 불가능한 날로 선택';
+            cell.appendChild(mineIndicator);
         }
 
         if (people.length) {
