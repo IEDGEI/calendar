@@ -987,6 +987,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderParticipants();
         }
     });
+    document.getElementById('btn-back-to-landing').addEventListener('click', async () => {
+        await resetToLanding();
+        document.getElementById('input-room-code').value = '';
+        document.getElementById('form-join').classList.remove('hidden');
+        document.getElementById('form-create').classList.add('hidden');
+        document.getElementById('tab-join').className =
+            'py-2.5 text-sm font-semibold rounded-lg bg-gray-800 text-white shadow-sm transition';
+        document.getElementById('tab-create').className =
+            'py-2.5 text-sm font-semibold rounded-lg text-gray-400 hover:text-white transition';
+        document.getElementById('input-room-code').focus();
+        showToast('방 정보는 그대로 유지됩니다. 다른 초대 코드를 입력하세요.', 'meeting_room');
+    });
     document.getElementById('btn-edit-nickname').addEventListener('click', () => {
         document.getElementById('input-edit-nickname').value = AppState.user.nickname;
         openModal('modal-nickname');
