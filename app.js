@@ -63,7 +63,7 @@ const Database = {
     async getRoom(code) {
         const { data, error } = await supabaseClient
             .from('rooms')
-            .select('room_code, room_name, owner_id, finalized_date, created_at, last_activity_at')
+            .select('room_code, room_name, owner_id, finalized_date, schedule_start_date, schedule_end_date, created_at, last_activity_at')
             .eq('room_code', code)
             .single();
         if (error) throw error;
@@ -140,10 +140,12 @@ const Database = {
         if (error) throw error;
     },
 
-    async setFinalizedDate(roomCode, finalizedDate) {
-        const { error } = await supabaseClient.rpc('set_calendar_finalized_date', {
+    async saveRoomSettings(roomCode, finalizedDate, startDate, endDate) {
+        const { error } = await supabaseClient.rpc('set_calendar_settings', {
             p_room_code: roomCode,
-            p_finalized_date: finalizedDate || null
+            p_finalized_date: finalizedDate || null,
+            p_schedule_start_date: startDate || null,
+            p_schedule_end_date: endDate || null
         });
         if (error) throw error;
     },
@@ -480,6 +482,20 @@ function makeDateString(year, month, day) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function isDateInRange(dateString) {
+    const startDate = AppState.room?.schedule_start_date;
+    const endDate = AppState.room?.schedule_end_date;
+    if (!startDate || !endDate) return true;
+    return dateString >= startDate && dateString <= endDate;
+}
+
+function moveCalendarToDate(dateString) {
+    if (!dateString) return;
+    const [year, month] = dateString.split('-').map(Number);
+    AppState.calendar.year = year;
+    AppState.calendar.month = month - 1;
+}
+
 function getBusyPeople(dateString) {
     const seen = new Set();
     return AppState.loadedSchedules
@@ -590,6 +606,7 @@ function renderCalendar() {
 
     for (let day = 1; day <= totalDays; day += 1) {
         const dateString = makeDateString(year, month, day);
+        const isInRange = isDateInRange(dateString);
         const people = getBusyPeople(dateString);
         const isMine = AppState.loadedSchedules.some((schedule) =>
             schedule.user_id === AppState.authUserId &&
@@ -600,20 +617,24 @@ function renderCalendar() {
         const cell = document.createElement('button');
         cell.type = 'button';
         cell.dataset.date = dateString;
-        cell.className = 'group relative aspect-square min-w-0 rounded-lg sm:rounded-xl border bg-gray-900/45 p-1.5 sm:p-2 text-left transition hover:z-50 hover:-translate-y-0.5 focus:z-50 focus:outline-none select-none touch-manipulation flex flex-col';
+        cell.className = 'group relative aspect-square min-w-0 rounded-lg sm:rounded-xl border p-1.5 sm:p-2 text-left transition focus:z-50 focus:outline-none select-none touch-manipulation flex flex-col';
 
-        if (people.length === 0) {
-            cell.className += ' border-emerald-800/60 hover:border-emerald-500/70 hover:bg-emerald-950/25';
+        if (!isInRange) {
+            cell.className += ' cursor-not-allowed border-gray-900 bg-gray-950/80 opacity-45';
+            cell.disabled = true;
+        } else if (people.length === 0) {
+            cell.className += ' bg-gray-900/45 hover:z-50 hover:-translate-y-0.5 border-emerald-800/60 hover:border-emerald-500/70 hover:bg-emerald-950/25';
         } else if (people.length === 1) {
-            cell.className += ' border-amber-800/60 hover:border-amber-500/70 hover:bg-amber-950/25';
+            cell.className += ' bg-gray-900/45 hover:z-50 hover:-translate-y-0.5 border-amber-800/60 hover:border-amber-500/70 hover:bg-amber-950/25';
         } else {
-            cell.className += ' border-rose-800/60 hover:border-rose-500/70 hover:bg-rose-950/25';
+            cell.className += ' bg-gray-900/45 hover:z-50 hover:-translate-y-0.5 border-rose-800/60 hover:border-rose-500/70 hover:bg-rose-950/25';
         }
         if (isToday) cell.className += ' shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]';
         if (isFinalized) cell.className += ' outline outline-2 outline-offset-2 outline-violet-400';
 
         const dayNumber = document.createElement('span');
         dayNumber.className = `text-xs sm:text-sm md:text-base font-bold leading-none ${
+            !isInRange ? 'text-gray-700' :
             people.length >= 2 ? 'text-red-400' :
             people.length === 1 ? 'text-amber-400' : 'text-emerald-400'
         }`;
@@ -621,26 +642,28 @@ function renderCalendar() {
 
         const statusTag = document.createElement('span');
         statusTag.className = 'mt-auto block max-w-full truncate text-[8px] sm:text-[9px] md:text-[10px] font-medium text-gray-500';
-        statusTag.innerText = people.length
+        statusTag.innerText = !isInRange
+            ? '범위 밖'
+            : people.length
             ? `${people.length}명 불가`
             : '가능';
         cell.append(dayNumber, statusTag);
 
-        if (isFinalized) {
+        if (isFinalized && isInRange) {
             const finalBadge = document.createElement('span');
             finalBadge.className = 'absolute right-1 top-1 rounded-full bg-violet-500 px-1.5 py-0.5 text-[7px] font-bold text-white shadow-lg';
             finalBadge.innerText = '약속';
             cell.appendChild(finalBadge);
         }
 
-        if (isMine) {
+        if (isMine && isInRange) {
             const mineIndicator = document.createElement('span');
             mineIndicator.className = 'absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-indigo-400 ring-2 ring-indigo-500/20';
             mineIndicator.title = '내가 불가능한 날로 선택';
             cell.appendChild(mineIndicator);
         }
 
-        if (people.length) {
+        if (people.length && isInRange) {
             const tooltip = document.createElement('span');
             const columnIndex = (startDayOfWeek + day - 1) % 7;
             const horizontalPosition = columnIndex === 0 ? 'left-0' :
@@ -650,33 +673,37 @@ function renderCalendar() {
             cell.appendChild(tooltip);
         }
 
-        let longPressed = false;
-        let longPressTimer = null;
-        cell.addEventListener('pointerdown', () => {
-            longPressed = false;
-            longPressTimer = window.setTimeout(() => {
-                longPressed = true;
-                openDateDetail(dateString);
-            }, 550);
-        });
-        ['pointerup', 'pointercancel', 'pointerleave'].forEach((eventName) => {
-            cell.addEventListener(eventName, () => window.clearTimeout(longPressTimer));
-        });
-        cell.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            openDateDetail(dateString);
-        });
-        cell.addEventListener('click', (event) => {
-            if (longPressed) {
-                event.preventDefault();
+        if (isInRange) {
+            let longPressed = false;
+            let longPressTimer = null;
+            cell.addEventListener('pointerdown', () => {
                 longPressed = false;
-                return;
-            }
-            toggleDate(dateString);
-        });
+                longPressTimer = window.setTimeout(() => {
+                    longPressed = true;
+                    openDateDetail(dateString);
+                }, 550);
+            });
+            ['pointerup', 'pointercancel', 'pointerleave'].forEach((eventName) => {
+                cell.addEventListener(eventName, () => window.clearTimeout(longPressTimer));
+            });
+            cell.addEventListener('contextmenu', (event) => {
+                event.preventDefault();
+                openDateDetail(dateString);
+            });
+            cell.addEventListener('click', (event) => {
+                if (longPressed) {
+                    event.preventDefault();
+                    longPressed = false;
+                    return;
+                }
+                toggleDate(dateString);
+            });
+        }
         cell.setAttribute(
             'aria-label',
-            `${day}일, ${people.length ? `${people.length}명 불가능` : '모두 가능'}. 길게 누르면 명단 보기`
+            !isInRange
+                ? `${day}일, 조율 범위 밖`
+                : `${day}일, ${people.length ? `${people.length}명 불가능` : '모두 가능'}. 길게 누르면 명단 보기`
         );
         grid.appendChild(cell);
     }
@@ -772,7 +799,7 @@ function renderBestDates() {
     const ranked = [];
     for (let day = 1; day <= totalDays; day += 1) {
         const date = makeDateString(year, month, day);
-        if (date < today) continue;
+        if (date < today || !isDateInRange(date)) continue;
         ranked.push({ date, count: getBusyPeople(date).length });
     }
     ranked.sort((a, b) => a.count - b.count || a.date.localeCompare(b.date));
@@ -810,6 +837,10 @@ function renderFinalizedDate() {
 function openRoomSettings() {
     document.getElementById('input-settings-final-date').value =
         AppState.room.finalized_date || '';
+    document.getElementById('input-settings-start-date').value =
+        AppState.room.schedule_start_date || '';
+    document.getElementById('input-settings-end-date').value =
+        AppState.room.schedule_end_date || '';
     openModal('modal-room-settings');
 }
 
@@ -1020,16 +1051,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-room-settings').addEventListener('click', openRoomSettings);
     document.getElementById('btn-save-room-settings').addEventListener('click', async () => {
         const finalizedDate = document.getElementById('input-settings-final-date').value;
+        const startDate = document.getElementById('input-settings-start-date').value;
+        const endDate = document.getElementById('input-settings-end-date').value;
+        if ((startDate && !endDate) || (!startDate && endDate)) {
+            return showToast('조율 시작일과 종료일을 모두 입력해 주세요.', 'warning');
+        }
+        if (startDate && startDate > endDate) {
+            return showToast('종료일은 시작일보다 빠를 수 없습니다.', 'warning');
+        }
+        if (finalizedDate && startDate &&
+            (finalizedDate < startDate || finalizedDate > endDate)) {
+            return showToast('최종 약속일은 조율 범위 안에 있어야 합니다.', 'warning');
+        }
         try {
-            await Database.setFinalizedDate(AppState.user.roomCode, finalizedDate);
-            await fetchAndRenderAll({ silent: true });
-            closeModal('modal-room-settings');
-            showToast(
-                finalizedDate ? '최종 약속일을 확정했습니다.' : '최종 약속일 확정을 취소했습니다.',
-                'event_available'
+            await Database.saveRoomSettings(
+                AppState.user.roomCode,
+                finalizedDate,
+                startDate,
+                endDate
             );
+            await fetchAndRenderAll({ silent: true });
+            if (startDate) {
+                moveCalendarToDate(startDate);
+                renderCalendar();
+                renderBestDates();
+            }
+            closeModal('modal-room-settings');
+            showToast('일정 설정을 저장했습니다.', 'event_available');
         } catch (error) {
-            showToast(getErrorMessage(error, '약속일 설정에 실패했습니다.'), 'error');
+            showToast(getErrorMessage(error, '일정 설정에 실패했습니다.'), 'error');
         }
     });
     document.getElementById('btn-leave-room').addEventListener('click', async () => {
