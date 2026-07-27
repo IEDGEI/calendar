@@ -23,8 +23,7 @@ const AppState = {
     realtimePauseTimer: null,
     realtimeSequence: 0,
     realtimeRefreshTimer: null,
-    pendingDates: new Set(),
-    deferredInstallPrompt: null
+    pendingDates: new Set()
 };
 
 const Database = {
@@ -932,18 +931,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    window.addEventListener('beforeinstallprompt', (event) => {
-        event.preventDefault();
-        AppState.deferredInstallPrompt = event;
-        document.getElementById('btn-install-app').classList.remove('hidden');
-    });
-    document.getElementById('btn-install-app').addEventListener('click', async () => {
-        if (!AppState.deferredInstallPrompt) return;
-        AppState.deferredInstallPrompt.prompt();
-        await AppState.deferredInstallPrompt.userChoice;
-        AppState.deferredInstallPrompt = null;
-        document.getElementById('btn-install-app').classList.add('hidden');
-    });
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js').catch((error) => {
             console.warn('서비스 워커 등록 실패:', error);
