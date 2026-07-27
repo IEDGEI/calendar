@@ -1,0 +1,18 @@
+{
+  "name": "역발상 공유 캘린더",
+  "short_name": "공유 캘린더",
+  "description": "안 되는 날을 표시해 모두 가능한 약속 날짜를 찾는 공유 캘린더",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b0d13",
+  "theme_color": "#4f46e5",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
