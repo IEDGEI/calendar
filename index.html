@@ -412,7 +412,7 @@
                 const cell = document.createElement('button');
                 cell.type = 'button';
                 cell.dataset.date = dateString;
-                cell.className = 'aspect-square flex flex-col justify-between p-2 rounded-xl cursor-pointer transition select-none group text-left ';
+                cell.className = 'relative aspect-square flex flex-col justify-between p-2 rounded-xl cursor-pointer transition select-none group text-left hover:z-50 focus-visible:z-50 ';
 
                 if (busyPeople.length === 0) {
                     cell.className += 'bg-[#0f241a] border border-green-900/30 text-green-400 hover:bg-[#143224]';
@@ -431,11 +431,28 @@
                 if (busyPeople.length > 0) {
                     statusTag.className = 'text-[9px] truncate max-w-full text-gray-400 font-medium tracking-tight';
                     statusTag.innerText = busyPeople.join(', ');
+                    cell.title = `불가능: ${busyPeople.join(', ')}`;
+                    cell.setAttribute('aria-label', `${day}일, 불가능: ${busyPeople.join(', ')}`);
                 } else {
                     statusTag.className = 'text-[9px] text-green-500/70 opacity-0 group-hover:opacity-100 transition-opacity font-bold';
                     statusTag.innerText = 'OK';
+                    cell.setAttribute('aria-label', `${day}일, 모두 가능`);
                 }
                 cell.appendChild(statusTag);
+
+                if (busyPeople.length > 0) {
+                    const tooltip = document.createElement('span');
+                    const columnIndex = (startDayOfWeek + day - 1) % 7;
+                    const horizontalPosition = columnIndex === 0
+                        ? 'left-0'
+                        : columnIndex === 6
+                            ? 'right-0'
+                            : 'left-1/2 -translate-x-1/2';
+
+                    tooltip.className = `pointer-events-none absolute top-full z-50 mt-2 hidden w-max max-w-[16rem] whitespace-normal rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-[11px] font-medium leading-relaxed text-gray-100 shadow-2xl group-hover:block group-focus-visible:block ${horizontalPosition}`;
+                    tooltip.innerText = `불가능: ${busyPeople.join(', ')}`;
+                    cell.appendChild(tooltip);
+                }
 
                 cell.addEventListener('click', async () => {
                     if (AppState.pendingDates.has(dateString)) return;
