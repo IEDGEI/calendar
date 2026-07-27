@@ -84,7 +84,7 @@ const Database = {
     async getParticipants(roomCode) {
         const { data, error } = await supabaseClient
             .from('participants')
-            .select('id, room_code, user_id, nickname, joined_at, last_seen_at')
+            .select('id, room_code, user_id, nickname, joined_at, last_seen_at, is_complete, completed_at')
             .eq('room_code', roomCode)
             .order('joined_at', { ascending: true });
         if (error) throw error;
@@ -144,6 +144,21 @@ const Database = {
         const { error } = await supabaseClient.rpc('set_calendar_finalized_date', {
             p_room_code: roomCode,
             p_finalized_date: finalizedDate || null
+        });
+        if (error) throw error;
+    },
+
+    async setScheduleCompletion(roomCode, isComplete) {
+        const { error } = await supabaseClient.rpc('set_my_schedule_completion', {
+            p_room_code: roomCode,
+            p_is_complete: isComplete
+        });
+        if (error) throw error;
+    },
+
+    async clearMySchedules(roomCode) {
+        const { error } = await supabaseClient.rpc('clear_my_calendar_schedules', {
+            p_room_code: roomCode
         });
         if (error) throw error;
     },
@@ -281,6 +296,15 @@ function upsertSchedule(row) {
         )
     );
     if (row.is_impossible) AppState.loadedSchedules.push(row);
+}
+
+function markMyCompletionDirty() {
+    const me = AppState.loadedParticipants.find(
+        (person) => person.user_id === AppState.authUserId
+    );
+    if (!me?.is_complete) return;
+    me.is_complete = false;
+    me.completed_at = null;
 }
 
 function handleScheduleChange(payload) {
@@ -505,6 +529,7 @@ async function toggleDate(dateString) {
         schedule.impossible_date === dateString
     );
     const nextValue = !existing;
+    markMyCompletionDirty();
     if (existing) {
         AppState.loadedSchedules = AppState.loadedSchedules.filter((schedule) =>
             schedule !== existing
@@ -676,18 +701,61 @@ function renderParticipants() {
                 .map((schedule) => schedule.impossible_date)
         ).size;
         const row = document.createElement('div');
-        row.className = 'flex justify-between items-center bg-gray-900 border border-gray-800/80 p-2.5 rounded-xl';
+        row.className = `flex items-center justify-between gap-2 rounded-xl border p-2.5 ${
+            person.is_complete
+                ? 'border-emerald-900/60 bg-emerald-950/20'
+                : 'border-gray-800/80 bg-gray-900'
+        }`;
         const label = document.createElement('span');
         label.className = `min-w-0 truncate text-xs font-semibold ${isMe ? 'text-indigo-400' : 'text-gray-300'}`;
         label.innerText = `${person.nickname}${isMe ? ' (나)' : ''}`;
+        const badges = document.createElement('div');
+        badges.className = 'flex shrink-0 items-center gap-1.5';
+        const completionBadge = document.createElement('span');
+        completionBadge.className = `inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${
+            person.is_complete
+                ? 'border-emerald-800/70 bg-emerald-950/60 text-emerald-400'
+                : 'border-gray-700 bg-gray-800 text-gray-500'
+        }`;
+        completionBadge.innerHTML = person.is_complete
+            ? '<span class="material-icons text-[11px]">check</span>완료'
+            : '입력 중';
         const badge = document.createElement('span');
         badge.className = 'shrink-0 bg-gray-800 border border-gray-700 text-gray-400 font-semibold text-[10px] px-2 py-0.5 rounded-md';
         badge.innerText = `안됨 ${unavailableDays}일`;
-        row.append(label, badge);
+        badges.append(completionBadge, badge);
+        row.append(label, badges);
         list.appendChild(row);
     });
+    const completedCount = participants.filter((person) => person.is_complete).length;
     document.getElementById('participant-count').innerText =
         `${participants.length}/50`;
+    document.getElementById('completion-count').innerText =
+        `${completedCount}/${participants.length}명 완료`;
+
+    const me = participants.find((person) => person.user_id === AppState.authUserId);
+    const completionButton = document.getElementById('btn-toggle-complete');
+    if (me?.is_complete) {
+        completionButton.className = 'mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-800/70 bg-emerald-950/50 py-2.5 text-xs font-bold text-emerald-400 transition hover:bg-emerald-950/80';
+        completionButton.innerHTML = '<span class="material-icons text-sm">check_circle</span>입력 완료됨 · 다시 수정';
+        completionButton.setAttribute('aria-pressed', 'true');
+    } else {
+        completionButton.className = 'mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500';
+        completionButton.innerHTML = '<span class="material-icons text-sm">task_alt</span>일정 입력 완료';
+        completionButton.setAttribute('aria-pressed', 'false');
+    }
+
+    const myScheduleCount = new Set(
+        AppState.loadedSchedules
+            .filter((schedule) => schedule.user_id === AppState.authUserId)
+            .map((schedule) => schedule.impossible_date)
+    ).size;
+    const clearButton = document.getElementById('btn-clear-my-schedule');
+    clearButton.disabled = myScheduleCount === 0;
+    clearButton.classList.toggle('opacity-40', myScheduleCount === 0);
+    clearButton.classList.toggle('cursor-not-allowed', myScheduleCount === 0);
+    document.getElementById('my-schedule-count').innerText =
+        myScheduleCount ? `선택한 ${myScheduleCount}일 모두 지우기` : '지울 일정 없음';
 }
 
 function renderBestDates() {
@@ -875,6 +943,49 @@ document.addEventListener('DOMContentLoaded', async () => {
         const success = await fetchAndRenderAll();
         if (!document.hidden && !AppState.realtimeChannel) await subscribeToRoom();
         if (success) showToast('일정을 새로고침했습니다.', 'refresh');
+    });
+    document.getElementById('btn-toggle-complete').addEventListener('click', async () => {
+        const button = document.getElementById('btn-toggle-complete');
+        const me = AppState.loadedParticipants.find(
+            (person) => person.user_id === AppState.authUserId
+        );
+        const nextValue = !me?.is_complete;
+        setButtonLoading(button, true, nextValue ? '완료 처리 중' : '수정 상태로 변경 중');
+        try {
+            await Database.setScheduleCompletion(AppState.user.roomCode, nextValue);
+            await fetchAndRenderAll({ silent: true });
+            showToast(
+                nextValue ? '일정 입력을 완료했습니다.' : '다시 수정할 수 있어요.',
+                nextValue ? 'task_alt' : 'edit_calendar'
+            );
+        } catch (error) {
+            showToast(getErrorMessage(error, '완료 상태 변경에 실패했습니다.'), 'error');
+        } finally {
+            setButtonLoading(button, false);
+            renderParticipants();
+        }
+    });
+    document.getElementById('btn-clear-my-schedule').addEventListener('click', async () => {
+        const myScheduleCount = new Set(
+            AppState.loadedSchedules
+                .filter((schedule) => schedule.user_id === AppState.authUserId)
+                .map((schedule) => schedule.impossible_date)
+        ).size;
+        if (!myScheduleCount) return;
+        if (!window.confirm(`내가 표시한 ${myScheduleCount}일을 모두 지울까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+
+        const button = document.getElementById('btn-clear-my-schedule');
+        setButtonLoading(button, true, '초기화 중');
+        try {
+            await Database.clearMySchedules(AppState.user.roomCode);
+            await fetchAndRenderAll({ silent: true });
+            showToast('내 일정을 모두 초기화했습니다.', 'restart_alt');
+        } catch (error) {
+            showToast(getErrorMessage(error, '일정 초기화에 실패했습니다.'), 'error');
+        } finally {
+            setButtonLoading(button, false);
+            renderParticipants();
+        }
     });
     document.getElementById('btn-edit-nickname').addEventListener('click', () => {
         document.getElementById('input-edit-nickname').value = AppState.user.nickname;

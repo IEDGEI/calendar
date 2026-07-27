@@ -173,6 +173,7 @@
                             <span class="material-icons text-sm text-indigo-400">people</span>
                             참가자
                             <span id="participant-count" class="text-[10px] text-gray-600">0/50</span>
+                            <span id="completion-count" class="text-[10px] font-bold text-emerald-500">0/0명 완료</span>
                         </h3>
                         <button id="btn-edit-nickname" type="button"
                                 class="text-[10px] font-bold text-indigo-400 hover:text-indigo-300">
@@ -180,6 +181,11 @@
                         </button>
                     </div>
                     <div id="participants-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                    <button id="btn-toggle-complete" type="button" aria-pressed="false"
+                            class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-500">
+                        <span class="material-icons text-sm">task_alt</span>일정 입력 완료
+                    </button>
+                    <p class="mt-2 text-center text-[10px] text-gray-600">완료 후 날짜를 바꾸면 자동으로 입력 중으로 돌아갑니다.</p>
                 </div>
 
                 <div class="bg-gray-950 border border-emerald-900/40 rounded-2xl p-5 shadow-xl">
@@ -224,6 +230,11 @@
                         <button id="btn-room-settings" type="button"
                                 class="flex items-center justify-center gap-1 rounded-xl bg-gray-800 px-3 py-2.5 text-xs font-bold text-gray-200 hover:bg-gray-700">
                             <span class="material-icons text-sm">event_available</span>약속일 설정
+                        </button>
+                        <button id="btn-clear-my-schedule" type="button"
+                                class="col-span-2 flex items-center justify-center gap-1 rounded-xl border border-amber-900/50 bg-amber-950/20 px-3 py-2.5 text-xs font-bold text-amber-400 hover:bg-amber-950/40">
+                            <span class="material-icons text-sm">restart_alt</span>
+                            <span id="my-schedule-count">지울 일정 없음</span>
                         </button>
                         <button id="btn-leave-room" type="button"
                                 class="col-span-2 flex items-center justify-center gap-1 rounded-xl border border-red-900/40 bg-red-950/20 px-3 py-2.5 text-xs font-bold text-red-400 hover:bg-red-950/40">
