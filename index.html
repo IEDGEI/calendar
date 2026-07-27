@@ -172,12 +172,19 @@
                 </div>
 
                 <div class="bg-gray-950 border border-emerald-900/40 rounded-2xl p-5 shadow-xl">
-                    <div class="flex items-center gap-2">
-                        <span id="realtime-badge" class="w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse"></span>
-                        <div>
-                            <h3 class="text-xs font-bold text-gray-200">실시간 동기화</h3>
-                            <p id="realtime-status" class="text-[10px] text-gray-400">연결 준비 중</p>
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span id="realtime-badge" class="w-2.5 h-2.5 shrink-0 rounded-full bg-yellow-500 animate-pulse"></span>
+                            <div class="min-w-0">
+                                <h3 class="text-xs font-bold text-gray-200">실시간 동기화</h3>
+                                <p id="realtime-status" class="text-[10px] text-gray-400">연결 준비 중</p>
+                            </div>
                         </div>
+                        <button id="btn-refresh-calendar" type="button"
+                                class="shrink-0 p-2 rounded-lg border border-gray-800 bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                                title="일정 새로고침" aria-label="일정 새로고침">
+                            <span class="material-icons text-base">refresh</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -211,6 +218,8 @@
             },
             loadedSchedules: [],
             realtimeChannel: null,
+            realtimePauseTimer: null,
+            realtimeSequence: 0,
             pendingDates: new Set()
         };
 
@@ -253,8 +262,9 @@
             async getSchedules(roomCode) {
                 const { data, error } = await supabaseClient
                     .from('schedules')
-                    .select('id, room_code, user_name, impossible_date')
+                    .select('id, room_code, user_name, impossible_date, is_impossible')
                     .eq('room_code', roomCode)
+                    .eq('is_impossible', true)
                     .order('impossible_date', { ascending: true });
 
                 if (error) throw error;
@@ -264,7 +274,7 @@
             async toggleSchedule(roomCode, userName, dateStr) {
                 const { data: existing, error: selectError } = await supabaseClient
                     .from('schedules')
-                    .select('id')
+                    .select('id, is_impossible')
                     .eq('room_code', roomCode)
                     .eq('user_name', userName)
                     .eq('impossible_date', dateStr)
@@ -276,7 +286,7 @@
                 if (existing) {
                     const { error } = await supabaseClient
                         .from('schedules')
-                        .delete()
+                        .update({ is_impossible: !existing.is_impossible })
                         .eq('id', existing.id);
                     if (error) throw error;
                     return;
@@ -287,7 +297,8 @@
                     .insert({
                         room_code: roomCode,
                         user_name: userName,
-                        impossible_date: dateStr
+                        impossible_date: dateStr,
+                        is_impossible: true
                     });
                 if (error) throw error;
             }
@@ -318,7 +329,8 @@
                 SUBSCRIBED: ['bg-emerald-500', '실시간 연결됨'],
                 CHANNEL_ERROR: ['bg-red-500', '실시간 연결 오류'],
                 TIMED_OUT: ['bg-amber-500', '실시간 연결 지연'],
-                CLOSED: ['bg-gray-500', '실시간 연결 종료']
+                CLOSED: ['bg-gray-500', '실시간 연결 종료'],
+                PAUSED: ['bg-gray-500', '백그라운드에서 일시 중지']
             };
             const [color, text] = states[status] || ['bg-yellow-500', '실시간 연결 중'];
 
@@ -359,19 +371,89 @@
             }
         }
 
-        async function subscribeToRoom() {
-            if (AppState.realtimeChannel) {
-                await supabaseClient.removeChannel(AppState.realtimeChannel);
-            }
+        function clearRealtimePauseTimer() {
+            window.clearTimeout(AppState.realtimePauseTimer);
+            AppState.realtimePauseTimer = null;
+        }
 
-            AppState.realtimeChannel = supabaseClient
-                .channel('shared-calendar-schedules')
+        async function stopRealtime(status = 'CLOSED') {
+            clearRealtimePauseTimer();
+            AppState.realtimeSequence += 1;
+            const channel = AppState.realtimeChannel;
+            AppState.realtimeChannel = null;
+            if (channel) {
+                await supabaseClient.removeChannel(channel);
+            }
+            if (status) setRealtimeStatus(status);
+        }
+
+        async function subscribeToRoom() {
+            if (
+                !AppState.user.roomCode ||
+                AppState.currentView !== 'calendar' ||
+                document.hidden
+            ) return;
+
+            clearRealtimePauseTimer();
+            const sequence = AppState.realtimeSequence + 1;
+            AppState.realtimeSequence = sequence;
+            const roomCode = AppState.user.roomCode;
+            const previousChannel = AppState.realtimeChannel;
+            AppState.realtimeChannel = null;
+
+            if (previousChannel) {
+                await supabaseClient.removeChannel(previousChannel);
+            }
+            if (
+                sequence !== AppState.realtimeSequence ||
+                roomCode !== AppState.user.roomCode ||
+                document.hidden
+            ) return;
+
+            const channel = supabaseClient
+                .channel(`shared-calendar-${roomCode}`)
                 .on(
                     'postgres_changes',
-                    { event: '*', schema: 'public', table: 'schedules' },
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'schedules',
+                        filter: `room_code=eq.${roomCode}`
+                    },
                     () => fetchAndRenderAll({ silent: true })
                 )
-                .subscribe(setRealtimeStatus);
+                .subscribe((status) => {
+                    if (AppState.realtimeChannel === channel) {
+                        setRealtimeStatus(status);
+                    }
+                });
+
+            AppState.realtimeChannel = channel;
+        }
+
+        function scheduleRealtimePause() {
+            clearRealtimePauseTimer();
+            AppState.realtimePauseTimer = window.setTimeout(() => {
+                if (document.hidden && AppState.realtimeChannel) {
+                    stopRealtime('PAUSED').catch((error) => {
+                        console.error('실시간 연결 중지 실패:', error);
+                    });
+                }
+            }, 60000);
+        }
+
+        async function resumeRealtime() {
+            clearRealtimePauseTimer();
+            if (
+                document.hidden ||
+                !AppState.user.roomCode ||
+                AppState.currentView !== 'calendar'
+            ) return;
+
+            await fetchAndRenderAll({ silent: true });
+            if (!AppState.realtimeChannel) {
+                await subscribeToRoom();
+            }
         }
 
         async function enterRoom(room, nickname) {
@@ -604,6 +686,14 @@
                 }
             });
 
+            document.getElementById('btn-refresh-calendar').addEventListener('click', async () => {
+                await fetchAndRenderAll();
+                if (!document.hidden && !AppState.realtimeChannel) {
+                    await subscribeToRoom();
+                }
+                showToast('일정을 새로고침했습니다.', 'refresh');
+            });
+
             document.getElementById('btn-prev-month').addEventListener('click', () => {
                 if (AppState.calendar.month === 0) {
                     AppState.calendar.month = 11;
@@ -622,6 +712,25 @@
                     AppState.calendar.month += 1;
                 }
                 renderCalendar();
+            });
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    scheduleRealtimePause();
+                } else {
+                    resumeRealtime().catch((error) => {
+                        console.error('실시간 연결 재개 실패:', error);
+                        setRealtimeStatus('CHANNEL_ERROR');
+                    });
+                }
+            });
+
+            window.addEventListener('pagehide', () => {
+                clearRealtimePauseTimer();
+                if (AppState.realtimeChannel) {
+                    supabaseClient.removeChannel(AppState.realtimeChannel);
+                    AppState.realtimeChannel = null;
+                }
             });
         });
     </script>
