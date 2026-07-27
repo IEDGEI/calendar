@@ -141,32 +141,16 @@ const Database = {
         if (error) throw error;
     },
 
-    async updateRoom(roomCode, roomName, finalizedDate) {
-        const { error } = await supabaseClient.rpc('update_calendar_room', {
+    async setFinalizedDate(roomCode, finalizedDate) {
+        const { error } = await supabaseClient.rpc('set_calendar_finalized_date', {
             p_room_code: roomCode,
-            p_room_name: roomName,
             p_finalized_date: finalizedDate || null
-        });
-        if (error) throw error;
-    },
-
-    async removeParticipant(roomCode, userId) {
-        const { error } = await supabaseClient.rpc('remove_calendar_participant', {
-            p_room_code: roomCode,
-            p_user_id: userId
         });
         if (error) throw error;
     },
 
     async leaveRoom(roomCode) {
         const { error } = await supabaseClient.rpc('leave_calendar_room', {
-            p_room_code: roomCode
-        });
-        if (error) throw error;
-    },
-
-    async deleteRoom(roomCode) {
-        const { error } = await supabaseClient.rpc('delete_calendar_room', {
             p_room_code: roomCode
         });
         if (error) throw error;
@@ -226,11 +210,6 @@ function setRealtimeStatus(status) {
     label.innerText = text;
 }
 
-function isRoomOwner() {
-    return Boolean(AppState.room?.owner_id) &&
-        AppState.room.owner_id === AppState.authUserId;
-}
-
 function getParticipant(userId, fallbackName = '') {
     return AppState.loadedParticipants.find((person) => person.user_id === userId) ||
         { user_id: userId, nickname: fallbackName || '이전 참가자' };
@@ -241,7 +220,7 @@ function storeUserSession(nickname, roomCode) {
     AppState.user.nickname = nickname;
     AppState.user.roomCode = roomCode;
     document.getElementById('current-user-display').innerText =
-        `${nickname}${isRoomOwner() ? ' · 방장' : ''}`;
+        nickname;
     document.getElementById('user-info').classList.remove('hidden');
 }
 
@@ -328,7 +307,7 @@ function handleParticipantChange(payload) {
         : payload.old;
     if (!row) return;
     if (row.user_id === AppState.authUserId && payload.eventType === 'DELETE') {
-        showToast('방에서 나갔거나 방장이 내보냈습니다.', 'logout');
+        showToast('방에서 나갔습니다.', 'logout');
         resetToLanding();
         return;
     }
@@ -342,7 +321,6 @@ function handleParticipantChange(payload) {
     }
     renderParticipants();
     renderCalendar();
-    renderOwnerParticipantAdmin();
 }
 
 function scheduleCoalescedRefresh() {
@@ -461,19 +439,14 @@ function renderAll() {
     renderParticipants();
     renderBestDates();
     renderFinalizedDate();
-    renderOwnerParticipantAdmin();
 }
 
 function renderRoomHeader() {
     if (!AppState.room) return;
     document.getElementById('calendar-room-title').innerText = AppState.room.room_name;
     document.getElementById('calendar-room-code').innerText = AppState.room.room_code;
-    const settingsButton = document.getElementById('btn-room-settings');
-    settingsButton?.classList.toggle('hidden', !isRoomOwner());
-    document.getElementById('btn-leave-room')
-        ?.classList.toggle('hidden', isRoomOwner());
     document.getElementById('current-user-display').innerText =
-        `${AppState.user.nickname}${isRoomOwner() ? ' · 방장' : ''}`;
+        AppState.user.nickname;
 }
 
 function getYearMonthString(year, month) {
@@ -685,7 +658,6 @@ function renderParticipants() {
     });
     participants.forEach((person) => {
         const isMe = person.user_id === AppState.authUserId;
-        const isOwner = person.user_id === AppState.room?.owner_id;
         const unavailableDays = new Set(
             AppState.loadedSchedules
                 .filter((schedule) => schedule.user_id === person.user_id)
@@ -695,7 +667,7 @@ function renderParticipants() {
         row.className = 'flex justify-between items-center bg-gray-900 border border-gray-800/80 p-2.5 rounded-xl';
         const label = document.createElement('span');
         label.className = `min-w-0 truncate text-xs font-semibold ${isMe ? 'text-indigo-400' : 'text-gray-300'}`;
-        label.innerText = `${person.nickname}${isMe ? ' (나)' : ''}${isOwner ? ' 👑' : ''}`;
+        label.innerText = `${person.nickname}${isMe ? ' (나)' : ''}`;
         const badge = document.createElement('span');
         badge.className = 'shrink-0 bg-gray-800 border border-gray-700 text-gray-400 font-semibold text-[10px] px-2 py-0.5 rounded-md';
         badge.innerText = `안됨 ${unavailableDays}일`;
@@ -755,45 +727,9 @@ function renderFinalizedDate() {
     }
 }
 
-function renderOwnerParticipantAdmin() {
-    const container = document.getElementById('owner-participants-admin');
-    if (!container) return;
-    container.innerHTML = '';
-    if (!isRoomOwner()) return;
-    AppState.loadedParticipants.forEach((person) => {
-        const row = document.createElement('div');
-        row.className = 'flex items-center justify-between rounded-lg bg-gray-900 px-3 py-2';
-        const name = document.createElement('span');
-        name.className = 'truncate text-xs text-gray-300';
-        name.innerText = `${person.nickname}${person.user_id === AppState.authUserId ? ' (나·방장)' : ''}`;
-        row.appendChild(name);
-        if (person.user_id !== AppState.authUserId) {
-            const remove = document.createElement('button');
-            remove.type = 'button';
-            remove.className = 'text-[10px] font-bold text-red-400 hover:text-red-300';
-            remove.innerText = '내보내기';
-            remove.addEventListener('click', async () => {
-                if (!window.confirm(`${person.nickname}님을 방에서 내보낼까요? 일정도 함께 삭제됩니다.`)) return;
-                try {
-                    await Database.removeParticipant(AppState.user.roomCode, person.user_id);
-                    await fetchAndRenderAll({ silent: true });
-                    showToast('참가자를 내보냈습니다.', 'person_remove');
-                } catch (error) {
-                    showToast(getErrorMessage(error, '내보내기에 실패했습니다.'), 'error');
-                }
-            });
-            row.appendChild(remove);
-        }
-        container.appendChild(row);
-    });
-}
-
 function openRoomSettings() {
-    if (!isRoomOwner()) return;
-    document.getElementById('input-settings-room-name').value = AppState.room.room_name;
     document.getElementById('input-settings-final-date').value =
         AppState.room.finalized_date || '';
-    renderOwnerParticipantAdmin();
     openModal('modal-room-settings');
 }
 
@@ -948,26 +884,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('btn-room-settings').addEventListener('click', openRoomSettings);
     document.getElementById('btn-save-room-settings').addEventListener('click', async () => {
-        const name = document.getElementById('input-settings-room-name').value.trim();
         const finalizedDate = document.getElementById('input-settings-final-date').value;
         try {
-            await Database.updateRoom(AppState.user.roomCode, name, finalizedDate);
+            await Database.setFinalizedDate(AppState.user.roomCode, finalizedDate);
             await fetchAndRenderAll({ silent: true });
             closeModal('modal-room-settings');
-            showToast('방 설정을 저장했습니다.', 'check_circle');
+            showToast(
+                finalizedDate ? '최종 약속일을 확정했습니다.' : '최종 약속일 확정을 취소했습니다.',
+                'event_available'
+            );
         } catch (error) {
-            showToast(getErrorMessage(error, '방 설정 저장에 실패했습니다.'), 'error');
-        }
-    });
-    document.getElementById('btn-delete-room').addEventListener('click', async () => {
-        if (!window.confirm('방과 모든 일정을 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return;
-        try {
-            await Database.deleteRoom(AppState.user.roomCode);
-            closeModal('modal-room-settings');
-            await resetToLanding();
-            showToast('방을 삭제했습니다.', 'delete');
-        } catch (error) {
-            showToast(getErrorMessage(error, '방 삭제에 실패했습니다.'), 'error');
+            showToast(getErrorMessage(error, '약속일 설정에 실패했습니다.'), 'error');
         }
     });
     document.getElementById('btn-leave-room').addEventListener('click', async () => {
