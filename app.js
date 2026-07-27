@@ -588,14 +588,14 @@ function renderCalendar() {
         if (isFinalized) cell.className += ' outline outline-2 outline-offset-2 outline-violet-400';
 
         const dayNumber = document.createElement('span');
-        dayNumber.className = `text-xs sm:text-sm font-bold leading-none ${
+        dayNumber.className = `text-xs sm:text-sm md:text-base font-bold leading-none ${
             people.length >= 2 ? 'text-red-400' :
             people.length === 1 ? 'text-amber-400' : 'text-emerald-400'
         }`;
         dayNumber.innerText = day;
 
         const statusTag = document.createElement('span');
-        statusTag.className = 'mt-auto block max-w-full truncate text-[8px] sm:text-[9px] font-medium text-gray-500';
+        statusTag.className = 'mt-auto block max-w-full truncate text-[8px] sm:text-[9px] md:text-[10px] font-medium text-gray-500';
         statusTag.innerText = people.length
             ? `${people.length}명 불가`
             : '가능';
