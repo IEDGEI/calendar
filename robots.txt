@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://calendar-6fch.onrender.com/sitemap.xml

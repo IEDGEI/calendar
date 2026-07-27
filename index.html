@@ -3,9 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>공유 캘린더</title>
+    <title>공유 캘린더 | 로그인 없이 모임 날짜 정하기</title>
     <meta name="theme-color" content="#4f46e5">
-    <meta name="description" content="안 되는 날을 표시해 모두 가능한 약속 날짜를 찾는 공유 캘린더">
+    <meta name="description" content="회원가입 없이 초대 코드로 함께 쓰는 일정 조율 캘린더. 각자 불가능한 날짜를 표시하고 모두 가능한 모임 날짜를 빠르게 찾아보세요.">
+    <meta name="keywords" content="공유 캘린더, 모임 날짜 정하기, 일정 조율, 약속 잡기, 모임 일정, 로그인 없는 캘린더">
+    <meta name="author" content="공유 캘린더">
+    <meta id="robots-meta" name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://calendar-6fch.onrender.com/">
+    <meta property="og:locale" content="ko_KR">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="공유 캘린더">
+    <meta property="og:title" content="공유 캘린더 | 로그인 없이 모임 날짜 정하기">
+    <meta property="og:description" content="각자 불가능한 날짜만 표시하면 모두 가능한 모임 날짜를 한눈에 확인할 수 있어요.">
+    <meta property="og:url" content="https://calendar-6fch.onrender.com/">
+    <meta property="og:image" content="https://calendar-6fch.onrender.com/icon.svg">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="공유 캘린더 | 모임 날짜 정하기">
+    <meta name="twitter:description" content="로그인 없이 초대 코드로 함께 쓰는 일정 조율 캘린더">
+    <script>
+        if (new URLSearchParams(window.location.search).has('room')) {
+            document.getElementById('robots-meta')
+                .setAttribute('content', 'noindex, nofollow, noarchive');
+        }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "공유 캘린더",
+      "url": "https://calendar-6fch.onrender.com/",
+      "applicationCategory": "ProductivityApplication",
+      "operatingSystem": "Web",
+      "inLanguage": "ko-KR",
+      "description": "회원가입 없이 여러 사람이 불가능한 날짜를 표시하고 가능한 모임 날짜를 찾는 일정 조율 웹 서비스",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "KRW"
+      }
+    }
+    </script>
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" href="./icon.svg" type="image/svg+xml">
     <!-- Tailwind CSS 및 구글 머티리얼 아이콘 로드 -->
@@ -48,8 +85,8 @@
             </div>
         </header>
 
-        <main id="view-landing" class="flex-grow flex flex-col justify-center max-w-md w-full mx-auto py-6">
-            <div class="bg-gray-950 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-2xl space-y-6">
+        <main id="view-landing" class="flex-grow flex flex-col justify-center max-w-4xl w-full mx-auto py-6">
+            <div class="max-w-md w-full mx-auto bg-gray-950 border border-gray-800 rounded-2xl p-6 md:p-8 shadow-2xl space-y-6">
                 <p id="auth-loading" class="rounded-xl border border-indigo-900/40 bg-indigo-950/30 px-3 py-2 text-center text-xs text-indigo-300">
                     안전한 익명 사용자 연결 중...
                 </p>
@@ -106,6 +143,49 @@
                     </button>
                 </div>
             </div>
+
+            <section aria-labelledby="service-intro-title" class="mt-14 border-t border-gray-900 pt-10">
+                <div class="mx-auto max-w-2xl text-center">
+                    <h2 id="service-intro-title" class="text-xl font-bold text-white">모임 날짜 정하기가 간단해집니다</h2>
+                    <p class="mt-3 text-sm leading-6 text-gray-400">
+                        공유 캘린더는 여러 사람이 각자 불가능한 날짜를 표시하고, 모두에게 맞는 약속 날짜를 한눈에 찾는 무료 일정 조율 서비스입니다.
+                    </p>
+                </div>
+                <div class="mt-8 grid gap-3 sm:grid-cols-3">
+                    <article class="rounded-2xl border border-gray-800/80 bg-gray-950/70 p-5">
+                        <span class="material-icons text-xl text-indigo-400">add_box</span>
+                        <h3 class="mt-3 text-sm font-bold text-gray-200">방 만들기</h3>
+                        <p class="mt-2 text-xs leading-5 text-gray-500">모임 이름과 닉네임만 입력하면 6자리 초대 코드가 만들어집니다.</p>
+                    </article>
+                    <article class="rounded-2xl border border-gray-800/80 bg-gray-950/70 p-5">
+                        <span class="material-icons text-xl text-amber-400">event_busy</span>
+                        <h3 class="mt-3 text-sm font-bold text-gray-200">불가능한 날짜 표시</h3>
+                        <p class="mt-2 text-xs leading-5 text-gray-500">참가자마다 참석하기 어려운 날짜를 달력에서 선택합니다.</p>
+                    </article>
+                    <article class="rounded-2xl border border-gray-800/80 bg-gray-950/70 p-5">
+                        <span class="material-icons text-xl text-emerald-400">event_available</span>
+                        <h3 class="mt-3 text-sm font-bold text-gray-200">가능한 날짜 확인</h3>
+                        <p class="mt-2 text-xs leading-5 text-gray-500">실시간으로 반영된 결과와 추천 날짜를 보고 최종 약속일을 정합니다.</p>
+                    </article>
+                </div>
+                <div class="mx-auto mt-12 max-w-2xl">
+                    <h2 class="text-lg font-bold text-white">자주 묻는 질문</h2>
+                    <div class="mt-4 divide-y divide-gray-900 rounded-2xl border border-gray-800/80 bg-gray-950/60 px-5">
+                        <article class="py-5">
+                            <h3 class="text-sm font-semibold text-gray-200">회원가입이 필요한가요?</h3>
+                            <p class="mt-2 text-xs leading-5 text-gray-500">아니요. 닉네임과 초대 코드만으로 바로 사용할 수 있습니다.</p>
+                        </article>
+                        <article class="py-5">
+                            <h3 class="text-sm font-semibold text-gray-200">여러 명이 동시에 수정할 수 있나요?</h3>
+                            <p class="mt-2 text-xs leading-5 text-gray-500">가능합니다. 참가자의 일정 변경은 같은 방에 실시간으로 반영됩니다.</p>
+                        </article>
+                        <article class="py-5">
+                            <h3 class="text-sm font-semibold text-gray-200">방과 일정은 얼마나 보관되나요?</h3>
+                            <p class="mt-2 text-xs leading-5 text-gray-500">마지막 활동 이후 30일 동안 사용하지 않은 방은 자동으로 삭제됩니다.</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <main id="view-calendar" class="flex-grow flex flex-col md:flex-row gap-6 hidden">
@@ -329,5 +409,10 @@
         <span class="text-xs font-semibold" id="toast-message">알림 메시지</span>
     </div>
     <script src="./app.js"></script>
+    <noscript>
+        <p class="fixed bottom-0 inset-x-0 bg-red-950 p-3 text-center text-sm text-red-200">
+            공유 캘린더를 사용하려면 브라우저에서 JavaScript를 활성화해 주세요.
+        </p>
+    </noscript>
 </body>
 </html>

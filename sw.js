@@ -1,5 +1,13 @@
-const CACHE_NAME = 'inverse-calendar-v5';
-const APP_SHELL = ['./', './index.html', './app.js', './manifest.webmanifest', './icon.svg'];
+const CACHE_NAME = 'inverse-calendar-v6';
+const APP_SHELL = [
+    './',
+    './index.html',
+    './app.js',
+    './manifest.webmanifest',
+    './icon.svg',
+    './robots.txt',
+    './sitemap.xml'
+];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
