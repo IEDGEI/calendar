@@ -1,8 +1,10 @@
-const CACHE_NAME = 'inverse-calendar-v6';
+const CACHE_NAME = 'shared-calendar-v12';
 const APP_SHELL = [
     './',
     './index.html',
     './app.js',
+    './styles.css',
+    './theme.js',
     './manifest.webmanifest',
     './icon.svg',
     './robots.txt',

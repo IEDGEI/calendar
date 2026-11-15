@@ -253,6 +253,10 @@ function switchView(viewName) {
     document.getElementById('view-landing').classList.toggle('hidden', !isLanding);
     document.getElementById('view-calendar').classList.toggle('hidden', isLanding);
     document.getElementById('user-info').classList.toggle('hidden', isLanding);
+    if (isLanding) {
+        delete document.getElementById('calendar-grid').dataset.renderKey;
+        delete document.getElementById('finalized-date-display').dataset.roomCode;
+    }
 }
 
 function openModal(id) {
@@ -584,18 +588,66 @@ async function toggleDate(dateString) {
     }
 }
 
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function playCalendarMotion(element, keyframes, duration = 240) {
+    if (!element?.animate || reducedMotion.matches || document.hidden) return;
+    element.getAnimations().filter((animation) => animation.id === 'calendar-feedback')
+        .forEach((animation) => animation.cancel());
+    const animation = element.animate(keyframes, {
+        duration, easing: 'cubic-bezier(.2, .8, .2, 1)'
+    });
+    animation.id = 'calendar-feedback';
+}
+
+reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) {
+        document.getAnimations().filter((animation) => animation.id === 'calendar-feedback')
+            .forEach((animation) => animation.cancel());
+    }
+});
+
+function animateFinalizedDate() {
+    const cell = document.querySelector(
+        `#calendar-grid [data-date="${AppState.room?.finalized_date}"]`
+    );
+    if (cell && !cell.disabled) {
+        playCalendarMotion(cell, [
+            { transform: 'scale(.97)' },
+            { transform: 'scale(1.035)', offset: .45 },
+            { transform: 'scale(1)' }
+        ], 420);
+        playCalendarMotion(cell.querySelector('.final-badge'), [
+            { opacity: 0, transform: 'translateY(4px)' },
+            { opacity: 1, transform: 'translateY(0)' }
+        ], 320);
+    }
+    playCalendarMotion(document.querySelector('.finalized-section'), [
+        { opacity: .65, transform: 'translateY(8px)' },
+        { opacity: 1, transform: 'translateY(0)' }
+    ], 360);
+}
+
 function renderCalendar() {
     const grid = document.getElementById('calendar-grid');
     if (!grid) return;
-    grid.innerHTML = '';
     const { year, month } = AppState.calendar;
+    const renderKey = `${AppState.user.roomCode}:${year}-${month}`;
+    const previousCells = new Map(grid.dataset.renderKey === renderKey
+        ? [...grid.querySelectorAll('[data-date]')].map((cell) => [cell.dataset.date, cell])
+        : []);
+    const focusedDate = grid.contains(document.activeElement)
+        ? document.activeElement.dataset.date : null;
+    const content = document.createDocumentFragment();
+    const changedCells = [];
     const startDayOfWeek = new Date(year, month, 1).getDay();
     const totalDays = new Date(year, month + 1, 0).getDate();
 
     for (let i = 0; i < startDayOfWeek; i += 1) {
         const emptyCell = document.createElement('div');
-        emptyCell.className = 'aspect-square invisible select-none';
-        grid.appendChild(emptyCell);
+        emptyCell.className = 'calendar-padding';
+        emptyCell.setAttribute('aria-hidden', 'true');
+        content.appendChild(emptyCell);
     }
 
     const todayString = makeDateString(
@@ -617,48 +669,42 @@ function renderCalendar() {
         const cell = document.createElement('button');
         cell.type = 'button';
         cell.dataset.date = dateString;
-        cell.className = 'group relative aspect-square min-w-0 rounded-lg sm:rounded-xl border p-1.5 sm:p-2 text-left transition focus:z-50 focus:outline-none select-none touch-manipulation flex flex-col';
+        cell.className = 'calendar-day group';
+        cell.setAttribute('aria-pressed', String(isMine && isInRange));
 
         if (!isInRange) {
-            cell.className += ' cursor-not-allowed border-gray-900 bg-gray-950/80 opacity-45';
+            cell.className += ' is-outside';
             cell.disabled = true;
         } else if (people.length === 0) {
-            cell.className += ' bg-gray-900/45 hover:z-50 hover:-translate-y-0.5 border-emerald-800/60 hover:border-emerald-500/70 hover:bg-emerald-950/25';
+            cell.className += ' is-available';
         } else if (people.length === 1) {
-            cell.className += ' bg-gray-900/45 hover:z-50 hover:-translate-y-0.5 border-amber-800/60 hover:border-amber-500/70 hover:bg-amber-950/25';
+            cell.className += ' is-busy';
         } else {
-            cell.className += ' bg-gray-900/45 hover:z-50 hover:-translate-y-0.5 border-rose-800/60 hover:border-rose-500/70 hover:bg-rose-950/25';
+            cell.className += ' is-crowded';
         }
-        if (isToday) cell.className += ' shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]';
-        if (isFinalized) cell.className += ' outline outline-2 outline-offset-2 outline-violet-400';
+        if (isToday) cell.className += ' is-today';
+        if (isFinalized && isInRange) cell.className += ' is-finalized';
 
         const dayNumber = document.createElement('span');
-        dayNumber.className = `text-xs sm:text-sm md:text-base font-bold leading-none ${
-            !isInRange ? 'text-gray-700' :
-            people.length >= 2 ? 'text-red-400' :
-            people.length === 1 ? 'text-amber-400' : 'text-emerald-400'
-        }`;
+        dayNumber.className = 'day-number';
         dayNumber.innerText = day;
 
         const statusTag = document.createElement('span');
-        statusTag.className = 'mt-auto block max-w-full truncate text-[8px] sm:text-[9px] md:text-[10px] font-medium text-gray-500';
-        statusTag.innerText = !isInRange
-            ? '범위 밖'
-            : people.length
-            ? `${people.length}명 불가`
-            : '가능';
+        statusTag.className = 'day-status';
+        statusTag.innerText = !isInRange ? '범위 밖' : people.length ? `${people.length}명 불가` : '가능';
         cell.append(dayNumber, statusTag);
 
         if (isFinalized && isInRange) {
             const finalBadge = document.createElement('span');
-            finalBadge.className = 'absolute right-1 top-1 rounded-full bg-violet-500 px-1.5 py-0.5 text-[7px] font-bold text-white shadow-lg';
+            finalBadge.className = 'final-badge';
             finalBadge.innerText = '약속';
             cell.appendChild(finalBadge);
         }
 
         if (isMine && isInRange) {
             const mineIndicator = document.createElement('span');
-            mineIndicator.className = 'absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-indigo-400 ring-2 ring-indigo-500/20';
+            mineIndicator.className = 'mine-indicator';
+            mineIndicator.innerHTML = '<span class="material-icons" aria-hidden="true">check</span>';
             mineIndicator.title = '내가 불가능한 날로 선택';
             cell.appendChild(mineIndicator);
         }
@@ -668,7 +714,7 @@ function renderCalendar() {
             const columnIndex = (startDayOfWeek + day - 1) % 7;
             const horizontalPosition = columnIndex === 0 ? 'left-0' :
                 columnIndex === 6 ? 'right-0' : 'left-1/2 -translate-x-1/2';
-            tooltip.className = `pointer-events-none absolute top-full z-50 mt-2 hidden w-max max-w-[16rem] whitespace-normal rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-[11px] font-medium leading-relaxed text-gray-100 shadow-2xl md:group-hover:block group-focus-visible:block ${horizontalPosition}`;
+            tooltip.className = `date-tooltip pointer-events-none absolute top-full z-50 mt-2 hidden w-max max-w-[16rem] whitespace-normal rounded-lg border px-3 py-2 leading-relaxed md:group-hover:block group-focus-visible:block ${horizontalPosition}`;
             tooltip.innerText = `불가능: ${people.map((person) => person.nickname).join(', ')}`;
             cell.appendChild(tooltip);
         }
@@ -703,12 +749,50 @@ function renderCalendar() {
             'aria-label',
             !isInRange
                 ? `${day}일, 조율 범위 밖`
-                : `${day}일, ${people.length ? `${people.length}명 불가능` : '모두 가능'}. 길게 누르면 명단 보기`
+                : `${day}일, ${isFinalized ? '약속 확정, ' : ''}${people.length ? `${people.length}명 불가능` : '모두 가능'}. 길게 누르면 명단 보기`
         );
-        grid.appendChild(cell);
+        const previous = previousCells.get(dateString);
+        // Reuse unchanged dates so database acknowledgements don't cut off feedback.
+        if (previous?.isEqualNode(cell)) {
+            content.appendChild(previous);
+        } else {
+            content.appendChild(cell);
+            if (previous && !previous.disabled && !cell.disabled && (
+                previous.getAttribute('aria-pressed') !== cell.getAttribute('aria-pressed') ||
+                previous.querySelector('.day-status').textContent !== statusTag.textContent
+            )) changedCells.push(cell);
+        }
     }
+    const trailingDays = (7 - (startDayOfWeek + totalDays) % 7) % 7;
+    for (let i = 0; i < trailingDays; i += 1) {
+        const padding = document.createElement('div');
+        padding.className = 'calendar-padding';
+        padding.setAttribute('aria-hidden', 'true');
+        content.appendChild(padding);
+    }
+    grid.replaceChildren(content);
+    grid.dataset.renderKey = renderKey;
+    if (focusedDate) {
+        grid.querySelector(`[data-date="${focusedDate}"]:not(:disabled)`)
+            ?.focus({ preventScroll: true });
+    }
+    changedCells.forEach((cell) => {
+        playCalendarMotion(cell, [{ transform: 'scale(.96)' }, { transform: 'scale(1)' }]);
+        playCalendarMotion(cell.querySelector('.day-status'), [{ opacity: .3 }, { opacity: 1 }]);
+        if (previousCells.get(cell.dataset.date).getAttribute('aria-pressed') !== 'true') {
+            playCalendarMotion(cell.querySelector('.mine-indicator'), [
+                { opacity: 0, transform: 'scale(.45)' },
+                { opacity: 1, transform: 'scale(1)' }
+            ]);
+        }
+    });
     document.getElementById('calendar-year-month').innerText =
         getYearMonthString(year, month);
+    const start = AppState.room?.schedule_start_date;
+    const end = AppState.room?.schedule_end_date;
+    document.getElementById('calendar-range-summary').innerText = start || end
+        ? `조율 기간 ${start || '시작 제한 없음'} ~ ${end || '종료 제한 없음'}`
+        : '날짜에 마우스를 올리면 불가능한 사람을 볼 수 있어요';
 }
 
 function renderParticipants() {
@@ -728,27 +812,20 @@ function renderParticipants() {
                 .map((schedule) => schedule.impossible_date)
         ).size;
         const row = document.createElement('div');
-        row.className = `flex items-center justify-between gap-2 rounded-xl border p-2.5 ${
-            person.is_complete
-                ? 'border-emerald-900/60 bg-emerald-950/20'
-                : 'border-gray-800/80 bg-gray-900'
-        }`;
+        row.className = 'participant-row';
         const label = document.createElement('span');
-        label.className = `min-w-0 truncate text-xs font-semibold ${isMe ? 'text-indigo-400' : 'text-gray-300'}`;
+        label.className = `participant-name${isMe ? ' is-me' : ''}`;
+        label.title = person.nickname;
         label.innerText = `${person.nickname}${isMe ? ' (나)' : ''}`;
         const badges = document.createElement('div');
-        badges.className = 'flex shrink-0 items-center gap-1.5';
+        badges.className = 'participant-badges';
         const completionBadge = document.createElement('span');
-        completionBadge.className = `inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${
-            person.is_complete
-                ? 'border-emerald-800/70 bg-emerald-950/60 text-emerald-400'
-                : 'border-gray-700 bg-gray-800 text-gray-500'
-        }`;
+        completionBadge.className = `completion-badge${person.is_complete ? ' is-complete' : ''}`;
         completionBadge.innerHTML = person.is_complete
             ? '<span class="material-icons text-[11px]">check</span>완료'
             : '입력 중';
         const badge = document.createElement('span');
-        badge.className = 'shrink-0 bg-gray-800 border border-gray-700 text-gray-400 font-semibold text-[10px] px-2 py-0.5 rounded-md';
+        badge.className = 'unavailable-count';
         badge.innerText = `안됨 ${unavailableDays}일`;
         badges.append(completionBadge, badge);
         row.append(label, badges);
@@ -806,12 +883,12 @@ function renderBestDates() {
     ranked.slice(0, 3).forEach((item, index) => {
         const row = document.createElement('button');
         row.type = 'button';
-        row.className = 'flex w-full items-center justify-between rounded-xl bg-gray-900 px-3 py-2 text-left hover:bg-gray-800 transition';
+        row.className = 'best-date';
         const date = document.createElement('span');
-        date.className = 'text-xs font-semibold text-gray-200';
+        date.className = 'best-date-label';
         date.innerText = `${index + 1}. ${item.date.slice(5).replace('-', '/')} (${['일','월','화','수','목','금','토'][new Date(`${item.date}T12:00:00`).getDay()]})`;
         const count = document.createElement('span');
-        count.className = `text-[10px] font-bold ${item.count ? 'text-amber-400' : 'text-emerald-400'}`;
+        count.className = `best-date-status${item.count ? ' is-busy' : ''}`;
         count.innerText = item.count ? `불가 ${item.count}명` : '모두 가능';
         row.append(date, count);
         row.addEventListener('click', () => openDateDetail(item.date));
@@ -825,12 +902,33 @@ function renderBestDates() {
 function renderFinalizedDate() {
     const label = document.getElementById('finalized-date-display');
     if (!label) return;
+    const roomCode = AppState.user.roomCode;
+    const finalizedDate = AppState.room?.finalized_date || '';
+    const sameRoom = label.dataset.roomCode === roomCode;
+    if (sameRoom && label.dataset.finalizedDate === finalizedDate) return;
+    label.dataset.roomCode = roomCode;
+    label.dataset.finalizedDate = finalizedDate;
     if (AppState.room?.finalized_date) {
-        label.innerText = AppState.room.finalized_date;
-        label.className = 'text-sm font-bold text-violet-300';
+        const isoDate = AppState.room.finalized_date;
+        const date = new Date(`${isoDate}T12:00:00`);
+        const year = document.createElement('span');
+        year.className = 'finalized-year';
+        year.innerText = `${date.getFullYear()}년`;
+        const day = document.createElement('time');
+        day.dateTime = isoDate;
+        day.innerText = `${date.getMonth() + 1}월 ${date.getDate()}일`;
+        const weekday = document.createElement('span');
+        weekday.className = 'finalized-weekday';
+        weekday.innerText = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'][date.getDay()];
+        label.replaceChildren(year, day, weekday);
+        label.className = '';
     } else {
         label.innerText = '아직 확정되지 않았어요';
-        label.className = 'text-xs text-gray-500';
+        label.className = 'is-empty';
+    }
+    if (sameRoom && finalizedDate &&
+        document.getElementById('modal-room-settings').classList.contains('hidden')) {
+        animateFinalizedDate();
     }
 }
 
@@ -1051,6 +1149,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-room-settings').addEventListener('click', openRoomSettings);
     document.getElementById('btn-save-room-settings').addEventListener('click', async () => {
         const finalizedDate = document.getElementById('input-settings-final-date').value;
+        const finalizedChanged = finalizedDate !== (AppState.room.finalized_date || '');
         const startDate = document.getElementById('input-settings-start-date').value;
         const endDate = document.getElementById('input-settings-end-date').value;
         if ((startDate && !endDate) || (!startDate && endDate)) {
@@ -1070,13 +1169,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 startDate,
                 endDate
             );
-            await fetchAndRenderAll({ silent: true });
-            if (startDate) {
-                moveCalendarToDate(startDate);
-                renderCalendar();
-                renderBestDates();
+            const targetDate = finalizedChanged && finalizedDate ? finalizedDate : startDate;
+            if (targetDate) moveCalendarToDate(targetDate);
+            const refreshed = await fetchAndRenderAll({ silent: true });
+            if (!refreshed) {
+                showToast('설정은 저장했지만 화면을 갱신하지 못했습니다. 새로고침해 주세요.', 'warning');
+                return;
             }
             closeModal('modal-room-settings');
+            if (finalizedChanged && finalizedDate && AppState.room.finalized_date === finalizedDate) {
+                animateFinalizedDate();
+            }
             showToast('일정 설정을 저장했습니다.', 'event_available');
         } catch (error) {
             showToast(getErrorMessage(error, '일정 설정에 실패했습니다.'), 'error');
